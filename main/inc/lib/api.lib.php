@@ -7408,6 +7408,7 @@ function api_resource_is_locked_by_gradebook($item_id, $link_type, $course_code 
     return false;
 }
 
+
 /**
  * Blocks a page if the item was added in a gradebook.
  *

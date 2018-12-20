@@ -34,6 +34,8 @@ class Category implements GradebookItem
     private $minimumToValidate;
     /** @var int */
     private $gradeBooksToValidateInDependence;
+    /** @var GradebookCategory */
+    public $entity;
 
     /**
      * Consctructor.
@@ -950,7 +952,6 @@ class Category implements GradebookItem
                 return $cacheDriver->fetch($key);
             }
         }
-
         // Classic
         if (!empty($stud_id) && $type == '') {
             if (!empty($course_code)) {
@@ -968,10 +969,8 @@ class Category implements GradebookItem
             }
 
             // Calculate score
-            $count = 0;
             $ressum = 0;
             $weightsum = 0;
-
             if (!empty($cats)) {
                 /** @var Category $cat */
                 foreach ($cats as $cat) {
@@ -997,17 +996,14 @@ class Category implements GradebookItem
                 }
             }
 
-            $students = [];
             if (!empty($evals)) {
                 /** @var Evaluation $eval */
                 foreach ($evals as $eval) {
                     $eval->setStudentList($this->getStudentList());
                     $evalres = $eval->calc_score($stud_id, null);
-
                     if (isset($evalres) && $eval->get_weight() != 0) {
                         $evalweight = $eval->get_weight();
                         $weightsum += $evalweight;
-                        $count++;
                         if (!empty($evalres[1])) {
                             $ressum += $evalres[0] / $evalres[1] * $evalweight;
                         }
@@ -1024,17 +1020,13 @@ class Category implements GradebookItem
                 /** @var EvalLink|ExerciseLink $link */
                 foreach ($links as $link) {
                     $link->setStudentList($this->getStudentList());
-
                     if ($session_id) {
                         $link->set_session_id($session_id);
                     }
-
                     $linkres = $link->calc_score($stud_id, null);
                     if (!empty($linkres) && $link->get_weight() != 0) {
-                        $students[$stud_id] = $linkres[0];
                         $linkweight = $link->get_weight();
                         $link_res_denom = $linkres[1] == 0 ? 1 : $linkres[1];
-                        $count++;
                         $weightsum += $linkweight;
                         $ressum += $linkres[0] / $link_res_denom * $linkweight;
                     } else {
@@ -1062,7 +1054,6 @@ class Category implements GradebookItem
             }
 
             // Calculate score
-            $count = 0;
             $ressum = 0;
             $weightsum = 0;
             $bestResult = 0;
@@ -1103,7 +1094,6 @@ class Category implements GradebookItem
                     if (isset($evalres) && $eval->get_weight() != 0) {
                         $evalweight = $eval->get_weight();
                         $weightsum += $evalweight;
-                        $count++;
                         if (!empty($evalres[1])) {
                             $ressum += $evalres[0] / $evalres[1] * $evalweight;
                         }
@@ -1119,6 +1109,7 @@ class Category implements GradebookItem
                     }
                 }
             }
+
             if (!empty($links)) {
                 /** @var EvalLink|ExerciseLink $link */
                 foreach ($links as $link) {
@@ -1127,14 +1118,11 @@ class Category implements GradebookItem
                     if ($session_id) {
                         $link->set_session_id($session_id);
                     }
-
                     $linkres = $link->calc_score($stud_id, $type);
                     if (!empty($linkres) && $link->get_weight() != 0) {
                         $students[$stud_id] = $linkres[0];
                         $linkweight = $link->get_weight();
                         $link_res_denom = $linkres[1] == 0 ? 1 : $linkres[1];
-
-                        $count++;
                         $weightsum += $linkweight;
                         $ressum += $linkres[0] / $link_res_denom * $linkweight;
 
@@ -2570,6 +2558,12 @@ class Category implements GradebookItem
     private static function create_category_objects_from_sql_result($result)
     {
         $categories = [];
+        $allow = api_get_configuration_value('allow_gradebook_stats');
+        if ($allow) {
+            $em = Database::getManager();
+            $repo = $em->getRepository('ChamiloCoreBundle:GradebookCategory');
+        }
+
         while ($data = Database::fetch_array($result)) {
             $cat = new Category();
             $cat->set_id($data['id']);
@@ -2589,6 +2583,10 @@ class Category implements GradebookItem
             $cat->setCourseListDependency(isset($data['depends']) ? $data['depends'] : []);
             $cat->setMinimumToValidate(isset($data['minimum_to_validate']) ? $data['minimum_to_validate'] : null);
             $cat->setGradeBooksToValidateInDependence(isset($data['gradebooks_to_validate_in_dependence']) ? $data['gradebooks_to_validate_in_dependence'] : null);
+
+            if ($allow) {
+                $cat->entity = $repo->find($data['id']);
+            }
 
             $categories[] = $cat;
         }

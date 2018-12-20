@@ -1,6 +1,8 @@
 <?php
 /* For licensing terms, see /license.txt */
 
+use ChamiloSession as Session;
+
 /**
  * Class ExerciseLink
  * Defines a gradebook ExerciseLink object.
@@ -176,6 +178,55 @@ class ExerciseLink extends AbstractLink
      */
     public function calc_score($stud_id = null, $type = null)
     {
+        $allowStats = api_get_configuration_value('allow_gradebook_stats');
+        if ($allowStats) {
+            $link = $this->entity;
+            if (!empty($link)) {
+                $weight = $link->getScoreWeight();
+                switch ($type) {
+                    case 'best':
+                        $bestResult = $link->getBestScore();
+                        $result = [$bestResult, $weight];
+
+                        return $result;
+                        break;
+                    case 'average':
+                        $count = count($link->getUserScoreList());
+                        if (empty($count)) {
+                            $result = [0, $weight];
+
+                            return $result;
+                        }
+
+                        $sumResult = array_sum($link->getUserScoreList());
+                        $result = [$sumResult / $count, $weight];
+
+                        return $result;
+                        break;
+                    case 'ranking':
+                        $ranking = AbstractLink::getCurrentUserRanking($stud_id, $link->getUserScoreList());
+
+                        return $ranking;
+                        break;
+                    default:
+                        if (!empty($stud_id)) {
+                            $scoreList = $link->getUserScoreList();
+                            $result = [0, $link->getScoreWeight()];
+                            if (isset($scoreList[$stud_id])) {
+                                $result = [$scoreList[$stud_id], $link->getScoreWeight()];
+                            }
+                            return $result;
+                        } else {
+                            $studentCount = count($link->getUserScoreList());
+                            $sumResult = array_sum($link->getUserScoreList());
+                            $result = [$sumResult, $studentCount];
+                        }
+                        return $result;
+                        break;
+                }
+            }
+        }
+
         $tblStats = Database::get_main_table(TABLE_STATISTIC_TRACK_E_EXERCISES);
         $tblHp = Database::get_main_table(TABLE_STATISTIC_TRACK_E_HOTPOTATOES);
         $tblDoc = Database::get_course_table(TABLE_DOCUMENT);
@@ -185,6 +236,7 @@ class ExerciseLink extends AbstractLink
         $sessionId = $this->get_session_id();
         $courseId = $this->getCourseId();
         $exerciseData = $this->get_exercise_data();
+
         $exerciseId = isset($exerciseData['id']) ? $exerciseData['id'] : 0;
         $stud_id = (int) $stud_id;
 
@@ -255,9 +307,8 @@ class ExerciseLink extends AbstractLink
             }
         }
 
-        $scores = Database::query($sql);
-
         if (isset($stud_id) && empty($type)) {
+            $scores = Database::query($sql);
             // for 1 student
             if ($data = Database::fetch_array($scores)) {
                 $result = [$data['exe_result'], $data['exe_weighting']];
@@ -290,6 +341,7 @@ class ExerciseLink extends AbstractLink
                 $studentIdList = array_column($studentList, 'user_id');
             }
 
+            $scores = Database::query($sql);
             while ($data = Database::fetch_array($scores, 'ASSOC')) {
                 // Only take into account users in the current student list.
                 if (!empty($studentIdList)) {
@@ -387,7 +439,8 @@ class ExerciseLink extends AbstractLink
         $exerciseId = $data['id'];
         $path = isset($data['path']) ? $data['path'] : '';
 
-        $url = api_get_path(WEB_CODE_PATH).'gradebook/exercise_jump.php?path='.$path.'&session_id='.$sessionId.'&cidReq='.$this->get_course_code().'&gradebook=view&exerciseId='.$exerciseId.'&type='.$this->get_type();
+        $url = api_get_path(WEB_CODE_PATH).
+            'gradebook/exercise_jump.php?path='.$path.'&session_id='.$sessionId.'&cidReq='.$this->get_course_code().'&gradebook=view&exerciseId='.$exerciseId.'&type='.$this->get_type();
         if ((!api_is_allowed_to_edit() && $this->calc_score($user_id) == null) || $status_user != 1) {
             $url .= '&doexercise='.$exerciseId;
         }
@@ -551,5 +604,19 @@ class ExerciseLink extends AbstractLink
         }
 
         return $this->exercise_data;
+    }
+
+    public function getBestScore()
+    {
+        return $this->getStats('best');
+    }
+
+    public function getStats($type)
+    {
+        switch ($type) {
+            case 'best':
+
+                break;
+        }
     }
 }

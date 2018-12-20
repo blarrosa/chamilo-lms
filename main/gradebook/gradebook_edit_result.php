@@ -17,6 +17,9 @@ if (empty($select_eval)) {
 $resultedit = Result::load(null, null, $select_eval);
 $evaluation = Evaluation::load($select_eval);
 $evaluation[0]->check_lock_permissions();
+$courseInfo = api_get_course_info();
+$sessionId = api_get_session_id();
+
 $edit_result_form = new EvalForm(
     EvalForm::TYPE_ALL_RESULTS_EDIT,
     $evaluation[0],
@@ -28,14 +31,23 @@ $edit_result_form = new EvalForm(
 if ($edit_result_form->validate()) {
     $values = $edit_result_form->exportValues();
     $scores = $values['score'];
+    $bestResult = 0;
+    $scoreFinalList = [];
     foreach ($scores as $userId => $score) {
         /** @var array $resultedit */
         $resultedit = Result::load($userId);
+
         /** @var Result $result */
         $result = $resultedit[0];
 
         if (empty($score)) {
             $score = 0;
+        }
+
+        $scoreFinalList[$result->get_user_id()] = $score;
+
+        if ($score > $bestResult) {
+            $bestResult = $score;
         }
         $score = api_number_format($score, api_get_setting('gradebook_number_decimals'));
         $result->set_score($score);
@@ -55,6 +67,35 @@ if ($edit_result_form->validate()) {
             Database::insert($table, $params);
         }
     }
+
+    /*$em = Database::getManager();
+    $repo = $em->getRepository('ChamiloCourseBundle:CToolStats');
+    $criteria = [
+        'cId' => $courseInfo['real_id'],
+        'sessionId' => $sessionId,
+        'itemId' => $select_eval,
+        'tool' => 'evaluation'
+    ];
+    $stats = $repo->findOneBy($criteria);
+
+    if (empty($stats)) {
+        $stats = new \Chamilo\CourseBundle\Entity\CToolStats();
+        $stats
+            ->setCId($courseInfo['real_id'])
+            ->setSessionId($sessionId)
+            ->setItemId($select_eval)
+            ->setTool('evaluation')
+        ;
+    }
+
+    $stats
+        ->setUserScoreList($scoreFinalList)
+        ->setBestScore($bestResult)
+        ->setScoreWeight($evaluation[0]->get_max())
+    ;
+    $em->persist($stats);
+    $em->flush();*/
+
     Display::addFlash(Display::return_message(get_lang('AllResultsEdited')));
     header('Location: gradebook_view_result.php?selecteval='.$select_eval.'&'.api_get_cidreq());
     exit;

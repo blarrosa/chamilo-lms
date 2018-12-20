@@ -9,7 +9,7 @@ use ChamiloSession as Session;
 require_once __DIR__.'/../inc/global.inc.php';
 $current_course_tool = TOOL_GRADEBOOK;
 
-api_protect_course_script();
+api_protect_course_script(true);
 api_set_more_memory_and_time_limits();
 api_block_anonymous_users();
 GradebookUtils::block_students();
@@ -18,6 +18,7 @@ $cat_id = isset($_GET['selectcat']) ? (int) $_GET['selectcat'] : null;
 $action = isset($_GET['action']) && $_GET['action'] ? $_GET['action'] : null;
 
 $sessionId = api_get_session_id();
+$courseInfo = api_get_course_info();
 $statusToFilter = empty($sessionId) ? STUDENT : 0;
 
 $userList = CourseManager::get_user_list_from_course_code(
@@ -28,19 +29,54 @@ $userList = CourseManager::get_user_list_from_course_code(
     $statusToFilter
 );
 
+$loadStats = [];
+if (api_get_setting('gradebook_detailed_admin_view') === 'true') {
+    $loadStats = [1, 2, 3];
+} else {
+    if (api_get_configuration_value('gradebook_enable_best_score') !== false) {
+        $loadStats = [2];
+    }
+}
+
 switch ($action) {
     case 'export_all':
         $cats = Category::load($cat_id, null, null, null, null, null, false);
-        $studentList = CourseManager::get_user_list_from_course_code(
+        $cat = $cats[0];
+        $allcat = $cats[0]->get_subcategories(
+            null,
             api_get_course_id(),
-            $sessionId,
+            api_get_session_id()
+        );
+        $alleval = $cats[0]->get_evaluations(
             null,
+            api_get_course_id(),
+            api_get_session_id()
+        );
+        $alllink = $cats[0]->get_links(
             null,
-            $statusToFilter
+            api_get_course_id(),
+            api_get_session_id()
         );
 
+        $gradebooktable = new GradebookTable(
+            $cat,
+            $allcat,
+            $alleval,
+            $alllink,
+            null, // params
+            true, // $exportToPdf
+            false, // showteacher
+            null,
+            $userList,
+            $loadStats
+        );
+
+        $key = $gradebooktable->getPreloadDataKey();
+        // preloads data
+        Session::erase($key);
+        $defaultData = $gradebooktable->preloadData();
+
         $tpl = new Template('', false, false, false);
-        $courseInfo = api_get_course_info();
         $params = [
             'pdf_title' => sprintf(get_lang('GradeFromX'), $courseInfo['name']),
             'session_info' => '',
@@ -54,28 +90,32 @@ switch ($action) {
             'orientation' => 'P',
         ];
         $pdf = new PDF('A4', $params['orientation'], $params, $tpl);
+        $counter = 0;
         $htmlList = [];
         foreach ($userList as $index => $value) {
             $htmlList[] = GradebookUtils::generateTable(
+                $courseInfo,
                 $value['user_id'],
                 $cats,
+                false,
                 true,
-                true,
-                $studentList,
+                $userList,
                 $pdf
             );
+            error_log($counter);
+            $counter++;
         }
 
         if (!empty($htmlList)) {
-            // Print certificates (without the common header/footer/watermark
-            //  stuff) and return as one multiple-pages PDF
-            /*$address = api_get_setting('institution_address');
-            $phone = api_get_setting('administratorTelephone');
-            $address = str_replace('\n', '<br />', $address);
-            $pdf->custom_header = array('html' => "<h5 align='right'>$address <br />$phone</h5>");*/
-            //  stuff) and return as one multiple-pages PDF
+            $content = '';
+            foreach ($htmlList as $value) {
+                $content .= $value.'<pagebreak>';
+            }
+            $tempFile = api_get_path(SYS_ARCHIVE_PATH).uniqid().'.html';
+            file_put_contents($tempFile, $content);
+
             $pdf->html_to_pdf(
-                $htmlList,
+                $tempFile,
                 null,
                 null,
                 false,
@@ -86,12 +126,13 @@ switch ($action) {
 
         // Delete calc_score session data
         Session::erase('calc_score');
+        Session::erase('calc_score');
 
         break;
     case 'download':
         $userId = isset($_GET['user_id']) && $_GET['user_id'] ? $_GET['user_id'] : null;
         $cats = Category::load($cat_id, null, null, null, null, null, false);
-        GradebookUtils::generateTable($userId, $cats);
+        GradebookUtils::generateTable($courseInfo, $userId, $cats);
         break;
 }
 

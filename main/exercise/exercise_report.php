@@ -19,6 +19,13 @@ $this_section = SECTION_COURSES;
 $htmlHeadXtra[] = api_get_jqgrid_js();
 
 $filter_user = isset($_REQUEST['filter_by_user']) ? (int) $_REQUEST['filter_by_user'] : null;
+
+$action = isset($_GET['action']) ? $_GET['action'] : '';
+$courseId = api_get_course_int_id();
+$sessionId = api_get_session_id();
+$exerciseId = isset($_REQUEST['exerciseId']) ? (int) $_REQUEST['exerciseId'] : 0;
+$courseInfo = api_get_course_info();
+
 $isBossOfStudent = false;
 if (api_is_student_boss() && !empty($filter_user)) {
     // Check if boss has access to user info.
@@ -37,7 +44,7 @@ require_once 'hotpotatoes.lib.php';
 $_course = api_get_course_info();
 
 // document path
-$documentPath = api_get_path(SYS_COURSE_PATH).$_course['path']."/document";
+$documentPath = api_get_path(SYS_COURSE_PATH).$_course['path'].'/document';
 $origin = api_get_origin();
 $path = isset($_GET['path']) ? Security::remove_XSS($_GET['path']) : null;
 
@@ -55,12 +62,9 @@ $TBL_TRACK_ATTEMPT_RECORDING = Database::get_main_table(TABLE_STATISTIC_TRACK_E_
 $TBL_LP_ITEM_VIEW = Database::get_course_table(TABLE_LP_ITEM_VIEW);
 $allowCoachFeedbackExercises = api_get_setting('allow_coach_feedback_exercises') === 'true';
 
-$course_id = api_get_course_int_id();
-$exercise_id = isset($_REQUEST['exerciseId']) ? (int) $_REQUEST['exerciseId'] : 0;
-$locked = api_resource_is_locked_by_gradebook($exercise_id, LINK_EXERCISE);
-$sessionId = api_get_session_id();
+$locked = api_resource_is_locked_by_gradebook($exerciseId, LINK_EXERCISE);
 
-if (empty($exercise_id)) {
+if (empty($exerciseId)) {
     api_not_allowed(true);
 }
 
@@ -70,7 +74,7 @@ if (empty($sessionId)) {
         $blockPage = false;
     }
 } else {
-    if ($allowCoachFeedbackExercises && api_is_coach($sessionId, $course_id)) {
+    if ($allowCoachFeedbackExercises && api_is_coach($sessionId, $courseId)) {
         $blockPage = false;
     } else {
         if ($is_allowedToEdit) {
@@ -83,8 +87,20 @@ if ($blockPage) {
     api_not_allowed(true);
 }
 
-if (!empty($exercise_id)) {
-    $parameters['exerciseId'] = $exercise_id;
+switch ($action) {
+    case 'generate_stats':
+        $exercise = new Exercise($courseId);
+        $result = $exercise->generateStats($exerciseId, $courseInfo, $sessionId);
+        if ($result) {
+            Display::addFlash(Display::return_message(get_lang('Updated')));
+            header('Location: '.api_get_path(WEB_CODE_PATH).'exercise/exercise.php?'.api_get_cidreq());
+            exit;
+        }
+        break;
+}
+
+if (!empty($exerciseId)) {
+    $parameters['exerciseId'] = $exerciseId;
 }
 
 if (!empty($_GET['path'])) {
@@ -148,9 +164,7 @@ if (!empty($_REQUEST['export_report']) && $_REQUEST['export_report'] == '1') {
 }
 
 $objExerciseTmp = new Exercise();
-$exerciseExists = $objExerciseTmp->read($exercise_id);
-
-$courseInfo = api_get_course_info();
+$exerciseExists = $objExerciseTmp->read($exerciseId);
 
 //Send student email @todo move this code in a class, library
 if (isset($_REQUEST['comments']) &&
@@ -158,7 +172,7 @@ if (isset($_REQUEST['comments']) &&
     ($is_allowedToEdit || $is_tutor || $allowCoachFeedbackExercises)
 ) {
     // Filtered by post-condition
-    $id = intval($_GET['exeid']);
+    $id = (int) $_GET['exeid'];
     $track_exercise_info = ExerciseLib::get_exercise_track_exercise_info($id);
 
     if (empty($track_exercise_info)) {
@@ -260,6 +274,9 @@ if (isset($_REQUEST['comments']) &&
         }
     }
 
+    $exercise = new Exercise($courseId);
+    $result = $exercise->generateStats($exerciseId, $courseInfo, $sessionId);
+
     // Updating LP score here
     if (!empty($lp_id) && !empty($lpItemId)) {
         $statusCondition = '';
@@ -308,11 +325,11 @@ if (isset($_REQUEST['comments']) &&
         $sql = "UPDATE $TBL_LP_ITEM_VIEW 
                 SET score = '".floatval($tot)."'
                 $statusCondition
-                WHERE c_id = ".$course_id." AND id = ".$lp_item_view_id;
+                WHERE c_id = ".$courseId." AND id = ".$lp_item_view_id;
         Database::query($sql);
 
         if (empty($origin)) {
-            header('Location: '.api_get_path(WEB_CODE_PATH).'exercise/exercise_report.php?exerciseId='.$exercise_id.'&'.api_get_cidreq());
+            header('Location: '.api_get_path(WEB_CODE_PATH).'exercise/exercise_report.php?exerciseId='.$exerciseId.'&'.api_get_cidreq());
             exit;
         }
 
@@ -339,9 +356,9 @@ if ($is_allowedToEdit && $origin != 'learnpath') {
     ) {
         $actions .= '<a href="exercise.php?'.api_get_cidreq().'">'.
             Display::return_icon('back.png', get_lang('GoBackToQuestionList'), '', ICON_SIZE_MEDIUM).'</a>';
-        $actions .= '<a href="live_stats.php?'.api_get_cidreq().'&exerciseId='.$exercise_id.'">'.
+        $actions .= '<a href="live_stats.php?'.api_get_cidreq().'&exerciseId='.$exerciseId.'">'.
             Display::return_icon('activity_monitor.png', get_lang('LiveResults'), '', ICON_SIZE_MEDIUM).'</a>';
-        $actions .= '<a href="stats.php?'.api_get_cidreq().'&exerciseId='.$exercise_id.'">'.
+        $actions .= '<a href="stats.php?'.api_get_cidreq().'&exerciseId='.$exerciseId.'">'.
             Display::return_icon('statistics.png', get_lang('ReportByQuestion'), '', ICON_SIZE_MEDIUM).'</a>';
 
         $actions .= '<a id="export_opener" href="'.api_get_self().'?export_report=1&exerciseId='.intval($_GET['exerciseId']).'" >'.
@@ -394,7 +411,7 @@ if (($is_allowedToEdit || $is_tutor || api_is_coach()) &&
     isset($_GET['delete']) && $_GET['delete'] == 'delete' &&
     !empty($_GET['did']) && $locked == false
 ) {
-    $exe_id = intval($_GET['did']);
+    $exe_id = (int) $_GET['did'];
     if (!empty($exe_id)) {
         $sql = 'DELETE FROM '.$TBL_TRACK_EXERCISES.' WHERE exe_id = '.$exe_id;
         Database::query($sql);
@@ -407,7 +424,13 @@ if (($is_allowedToEdit || $is_tutor || api_is_coach()) &&
             $exe_id,
             api_get_utc_datetime()
         );
-        header('Location: exercise_report.php?'.api_get_cidreq().'&exerciseId='.$exercise_id);
+
+        $exercise = new Exercise($courseId);
+        $result = $exercise->generateStats($exerciseId, $courseInfo, $sessionId);
+
+        Display::addFlash(Display::return_message(get_lang('Deleted')));
+
+        header('Location: exercise_report.php?'.api_get_cidreq().'&exerciseId='.$exerciseId);
         exit;
     }
 }
@@ -446,7 +469,7 @@ if (($is_allowedToEdit || $is_tutor || api_is_coach()) &&
     Database::query($sql);
 }
 
-Display :: display_header($nameTools);
+Display::display_header($nameTools);
 
 // Clean all results for this test before the selected date
 if (($is_allowedToEdit || $is_tutor || api_is_coach()) &&
@@ -456,7 +479,7 @@ if (($is_allowedToEdit || $is_tutor || api_is_coach()) &&
     $check = Security::check_token('get');
     if ($check) {
         $objExerciseTmp = new Exercise();
-        if ($objExerciseTmp->read($exercise_id)) {
+        if ($objExerciseTmp->read($exerciseId)) {
             $count = $objExerciseTmp->cleanResults(
                 true,
                 $_GET['delete_before_date'].' 23:59:59'
@@ -561,7 +584,7 @@ if ($is_allowedToEdit) {
 }
 
 echo $actions;
-$url = api_get_path(WEB_AJAX_PATH).'model.ajax.php?a=get_exercise_results&exerciseId='.$exercise_id.'&filter_by_user='.$filter_user.'&'.api_get_cidreq();
+$url = api_get_path(WEB_AJAX_PATH).'model.ajax.php?a=get_exercise_results&exerciseId='.$exerciseId.'&filter_by_user='.$filter_user.'&'.api_get_cidreq();
 $action_links = '';
 // Generating group list
 $group_list = GroupManager::get_group_list();
@@ -814,7 +837,7 @@ $extra_params['height'] = 'auto';
                 var dateFormat = $( "#datepicker_start" ).datepicker( "option", "dateFormat" );
                 var selectedDate = $.datepicker.formatDate(dateFormat, dateTypeVar);
                 if (confirm("<?php echo convert_double_quote_to_single(get_lang('AreYouSureDeleteTestResultBeforeDateD')).' '; ?>" + selectedDate)) {
-                    self.location.href = "exercise_report.php?<?php echo api_get_cidreq(); ?>&exerciseId=<?php echo $exercise_id; ?>&delete_before_date="+dateForBDD+"&sec_token=<?php echo $token; ?>";
+                    self.location.href = "exercise_report.php?<?php echo api_get_cidreq(); ?>&exerciseId=<?php echo $exerciseId; ?>&delete_before_date="+dateForBDD+"&sec_token=<?php echo $token; ?>";
                 }
             }
         }
@@ -833,9 +856,9 @@ $extra_params['height'] = 'auto';
 <form id="export_report_form" method="post" action="exercise_report.php?<?php echo api_get_cidreq(); ?>">
     <input type="hidden" name="csvBuffer" id="csvBuffer" value="" />
     <input type="hidden" name="export_report" id="export_report" value="1" />
-    <input type="hidden" name="exerciseId" id="exerciseId" value="<?php echo $exercise_id; ?>" />
+    <input type="hidden" name="exerciseId" id="exerciseId" value="<?php echo $exerciseId; ?>" />
 </form>
 
 <?php
 echo Display::grid_html('results');
-Display :: display_footer();
+Display::display_footer();

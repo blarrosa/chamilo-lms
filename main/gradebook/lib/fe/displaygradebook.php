@@ -330,7 +330,7 @@ class DisplayGradebook
             $total_score = [$item_value_total, $item_total];
             $scorecourse_display = $scoredisplay->display_score($total_score, SCORE_DIV_PERCENT);
 
-            if ((!$catobj->get_id() == '0') && (!isset($_GET['studentoverview'])) && (!isset($_GET['search']))) {
+            if ((!$catobj->get_id() == '0') && !isset($_GET['studentoverview']) && !isset($_GET['search'])) {
                 $additionalButtons = null;
                 if (!empty($certificateLinkInfo)) {
                     $additionalButtons .= '<div class="btn-group pull-right">';

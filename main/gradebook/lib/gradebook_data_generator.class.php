@@ -24,7 +24,7 @@ class GradebookDataGenerator
     public $userId;
     public $hidePercentage = false;
 
-    private $items;
+    public $items;
     private $evals_links;
 
     /**
@@ -92,7 +92,8 @@ class GradebookDataGenerator
         $count = null,
         $ignore_score_color = false,
         $studentList = [],
-        $loadStats = true
+        $loadStats = true,
+        $defaultData = []
     ) {
         // do some checks on count, redefine if invalid value
         if (!isset($count)) {
@@ -113,7 +114,8 @@ class GradebookDataGenerator
 
         // Generate the data to display
         $data = [];
-        $totalWeight = 0;
+        $allowStats = api_get_configuration_value('allow_gradebook_stats');
+        $scoreDisplay = ScoreDisplay::instance();
 
         /** @var GradebookItem $item */
         foreach ($visibleItems as $item) {
@@ -124,91 +126,187 @@ class GradebookDataGenerator
             // on mouseover (https://support.chamilo.org/issues/6588)
             $row[] = '<span title="'.api_remove_tags_with_space($item->get_description()).'">'.
                 api_get_short_text_from_html($item->get_description(), 160).'</span>';
-            $totalWeight += $item->get_weight();
             $row[] = $item->get_weight();
             $item->setStudentList($studentList);
 
-            if (get_class($item) == 'Evaluation') {
-                // Items inside a category.
-                $resultColumn = $this->build_result_column(
-                    $userId,
-                    $item,
-                    $ignore_score_color
-                );
+            $itemType = get_class($item);
 
-                $row[] = $resultColumn['display'];
-                $row['result_score'] = $resultColumn['score'];
-                $row['result_score_weight'] = $resultColumn['score_weight'];
+            switch ($itemType) {
+                case 'Evaluation':
+                    // Items inside a category.
+                    $resultColumn = $this->build_result_column(
+                        $userId,
+                        $item,
+                        $ignore_score_color
+                    );
 
-                // Best
-                $best = $this->buildBestResultColumn($item);
+                    $row[] = $resultColumn['display'];
+                    $row['result_score'] = $resultColumn['score'];
+                    $row['result_score_weight'] = $resultColumn['score_weight'];
 
-                $row['best'] = $best['display'];
-                $row['best_score'] = $best['score'];
-
-                // Average
-                $average = $this->buildAverageResultColumn($item);
-                $row['average'] = $average['display'];
-                $row['average_score'] = $average['score'];
-
-                // Ranking
-                $ranking = $this->buildRankingColumn($item, $userId, $userCount);
-                $row['ranking'] = $ranking['display'];
-                $row['ranking_score'] = $ranking['score'];
-                $row[] = $item;
-            } else {
-                // Category.
-                $result = $this->build_result_column(
-                    $userId,
-                    $item,
-                    $ignore_score_color,
-                    true
-                );
-                $row[] = $result['display'];
-                $row['result_score'] = $result['score'];
-                $row['result_score_weight'] = $result['score'];
-
-                // Best
-                $best = $this->buildBestResultColumn($item);
-                $row['best'] = $best['display'];
-                $row['best_score'] = $best['score'];
-
-                $rankingStudentList = [];
-                $invalidateResults = true;
-
-                // Average
-                $average = $this->buildAverageResultColumn($item);
-                $row['average'] = $average['display'];
-                $row['average_score'] = $average['score'];
-
-                // Ranking
-                if (!empty($studentList)) {
-                    foreach ($studentList as $user) {
-                        $score = $this->build_result_column(
-                            $user['user_id'],
-                            $item,
-                            $ignore_score_color,
-                            true
-                        );
-                        if (!empty($score['score'][0])) {
-                            $invalidateResults = false;
-                        }
-                        $rankingStudentList[$user['user_id']] = $score['score'][0];
+                    // Best
+                    if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['best'])) {
+                        $best = $defaultData[$item->get_id()]['best'];
+                    } else {
+                        $best = $this->buildBestResultColumn($item);
                     }
-                }
 
-                $scoreDisplay = ScoreDisplay::instance();
-                $score = AbstractLink::getCurrentUserRanking($userId, $rankingStudentList);
-                $row['ranking'] = $scoreDisplay->display_score(
-                    $score,
-                    SCORE_DIV,
-                    SCORE_BOTH,
-                    true,
-                    true
-                );
-                if ($invalidateResults) {
-                    $row['ranking'] = null;
-                }
+                    $row['best'] = $best['display'];
+                    $row['best_score'] = $best['score'];
+
+                    // Average
+                    if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['average'])) {
+                        $average = $defaultData[$item->get_id()]['average'];
+                    } else {
+                        $average = $this->buildBestResultColumn($item);
+                    }
+
+                    $row['average'] = $average['display'];
+                    $row['average_score'] = $average['score'];
+
+                    // Ranking
+                    $ranking = $this->buildRankingColumn($item, $userId, $userCount);
+                    $row['ranking'] = $ranking['display'];
+                    $row['ranking_score'] = $ranking['score'];
+                    $row[] = $item;
+                    break;
+                case 'ExerciseLink':
+                    /** @var ExerciseLink $item */
+                    // Category.
+                    $result = $this->build_result_column(
+                        $userId,
+                        $item,
+                        $ignore_score_color,
+                        true
+                    );
+                    $row[] = $result['display'];
+                    $row['result_score'] = $result['score'];
+                    $row['result_score_weight'] = $result['score'];
+
+                    // Best
+                    if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['best'])) {
+                        $best = $defaultData[$item->get_id()]['best'];
+                    } else {
+                        $best = $this->buildBestResultColumn($item);
+                    }
+
+                    $row['best'] = $best['display'];
+                    $row['best_score'] = $best['score'];
+
+                    $rankingStudentList = [];
+                    $invalidateResults = false;
+
+                    // Average
+                    if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['average'])) {
+                        $average = $defaultData[$item->get_id()]['average'];
+                    } else {
+                        $average = $this->buildBestResultColumn($item);
+                    }
+                    $row['average'] = $average['display'];
+                    $row['average_score'] = $average['score'];
+
+                    // Ranking
+                    if ($allowStats) {
+                        $score = AbstractLink::getCurrentUserRanking($userId, $item->entity->getUserScoreList());
+                    } else {
+                        if (!empty($studentList)) {
+                            foreach ($studentList as $user) {
+                                $score = $this->build_result_column(
+                                    $user['user_id'],
+                                    $item,
+                                    $ignore_score_color,
+                                    true
+                                );
+                                if (!empty($score['score'][0])) {
+                                    $invalidateResults = false;
+                                }
+                                $rankingStudentList[$user['user_id']] = $score['score'][0];
+                            }
+                        }
+                        $score = AbstractLink::getCurrentUserRanking($userId, $rankingStudentList);
+                    }
+
+                    $row['ranking'] = $scoreDisplay->display_score(
+                        $score,
+                        SCORE_DIV,
+                        SCORE_BOTH,
+                        true,
+                        true
+                    );
+                    if ($invalidateResults) {
+                        $row['ranking'] = null;
+                    }
+                    break;
+                default:
+                    // Category.
+                    $result = $this->build_result_column(
+                        $userId,
+                        $item,
+                        $ignore_score_color,
+                        true
+                    );
+                    $row[] = $result['display'];
+                    $row['result_score'] = $result['score'];
+                    $row['result_score_weight'] = $result['score'];
+
+                    // Best
+                    if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['best'])) {
+                        $best = $defaultData[$item->get_id()]['best'];
+                    } else {
+                        $best = $this->buildBestResultColumn($item);
+                    }
+
+                    $row['best'] = $best['display'];
+                    $row['best_score'] = $best['score'];
+
+                    $rankingStudentList = [];
+                    $invalidateResults = true;
+
+                    // Average
+                    if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['average'])) {
+                        $average = $defaultData[$item->get_id()]['average'];
+                    } else {
+                        $average = $this->buildBestResultColumn($item);
+                    }
+                    $row['average'] = $average['display'];
+                    $row['average_score'] = $average['score'];
+
+                    // Ranking
+                    if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['ranking'])) {
+                        $rankingStudentList = $defaultData[$item->get_id()]['ranking'];
+                        $invalidateResults = $defaultData[$item->get_id()]['ranking_invalidate'];
+                        $invalidateResults = false;
+                        $score = AbstractLink::getCurrentUserRanking($userId, $rankingStudentList);
+                    } else {
+                        if (!empty($studentList)) {
+                            foreach ($studentList as $user) {
+                                $score = $this->build_result_column(
+                                    $user['user_id'],
+                                    $item,
+                                    $ignore_score_color,
+                                    true
+                                );
+                                if (!empty($score['score'][0])) {
+                                    $invalidateResults = false;
+                                }
+                                $rankingStudentList[$user['user_id']] = $score['score'][0];
+                            }
+                        }
+                        $score = AbstractLink::getCurrentUserRanking($userId, $rankingStudentList);
+                    }
+
+                    $row['ranking'] = $scoreDisplay->display_score(
+                        $score,
+                        SCORE_DIV,
+                        SCORE_BOTH,
+                        true,
+                        true
+                    );
+
+                    if ($invalidateResults) {
+                        $row['ranking'] = null;
+                    }
+                    break;
             }
             $data[] = $row;
         }
@@ -244,7 +342,7 @@ class GradebookDataGenerator
      *
      * @return int
      */
-    public function sort_by_name($item1, $item2)
+    public static function sort_by_name($item1, $item2)
     {
         return api_strnatcmp($item1->get_name(), $item2->get_name());
     }
@@ -345,7 +443,7 @@ class GradebookDataGenerator
      *
      * @return array
      */
-    private function buildBestResultColumn(GradebookItem $item)
+    public function buildBestResultColumn(GradebookItem $item)
     {
         $score = $item->calc_score(
             null,
@@ -382,7 +480,7 @@ class GradebookDataGenerator
      *
      * @return array
      */
-    private function buildAverageResultColumn(GradebookItem $item)
+    public function buildAverageResultColumn(GradebookItem $item)
     {
         $score = $item->calc_score(null, 'average');
         $scoreDisplay = ScoreDisplay::instance();
@@ -421,7 +519,7 @@ class GradebookDataGenerator
      *
      * @return array
      */
-    private function buildRankingColumn(GradebookItem $item, $userId = null, $userCount = 0)
+    public function buildRankingColumn(GradebookItem $item, $userId = null, $userCount = 0)
     {
         $score = $item->calc_score($userId, 'ranking');
         $score[1] = $userCount;
@@ -450,7 +548,7 @@ class GradebookDataGenerator
      *
      * @return null|string
      */
-    private function build_result_column(
+    public function build_result_column(
         $userId,
         $item,
         $ignore_score_color,
@@ -491,7 +589,6 @@ class GradebookDataGenerator
                         ];
                     }
                     break;
-                // evaluation and link
                 case 'E':
                 case 'L':
                     //if ($parentId == 0) {
