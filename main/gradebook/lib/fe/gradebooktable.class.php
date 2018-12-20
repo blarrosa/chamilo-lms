@@ -197,7 +197,7 @@ class GradebookTable extends SortableTable
         usort($allitems, ['GradebookDataGenerator', 'sort_by_name']);
         $visibleItems = $this->datagen->items;
 
-        Session::erase($this->getPreloadDataKey());
+        //Session::erase($this->getPreloadDataKey());
         $defaultDataFromSession = Session::read($this->getPreloadDataKey());
         if (empty($defaultDataFromSession)) {
             $defaultData = [];
@@ -205,7 +205,7 @@ class GradebookTable extends SortableTable
             foreach ($visibleItems as $item) {
                 $item->setStudentList($this->studentList);
                 $itemType = get_class($item);
-                var_dump($itemType);
+
                 switch ($itemType) {
                     case 'Evaluation':
                         // Best
