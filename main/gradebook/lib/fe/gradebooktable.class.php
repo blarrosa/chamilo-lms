@@ -81,6 +81,8 @@ class GradebookTable extends SortableTable
         $this->cats = $cats;
         $this->loadStats = $loadStats;
         $this->datagen = new GradebookDataGenerator($cats, $evals, $links);
+        $this->datagen->preLoadDataKey = $this->getPreloadDataKey();
+
         $this->datagen->hidePercentage = api_get_configuration_value('hide_gradebook_percentage_user_result');
 
         if (!empty($userId)) {
@@ -195,7 +197,8 @@ class GradebookTable extends SortableTable
     {
         $allitems = $this->datagen->items;
         usort($allitems, ['GradebookDataGenerator', 'sort_by_name']);
-        $visibleItems = $this->datagen->items;
+        //$visibleItems = $this->datagen->items;
+        $visibleItems = array_merge($this->datagen->items, $this->evals_links);
 
         //Session::erase($this->getPreloadDataKey());
         $defaultDataFromSession = Session::read($this->getPreloadDataKey());
@@ -205,7 +208,6 @@ class GradebookTable extends SortableTable
             foreach ($visibleItems as $item) {
                 $item->setStudentList($this->studentList);
                 $itemType = get_class($item);
-
                 switch ($itemType) {
                     case 'Evaluation':
                         // Best
@@ -223,6 +225,25 @@ class GradebookTable extends SortableTable
                         // Average
                         $average = $this->datagen->buildAverageResultColumn($item);
                         $defaultData[$item->get_id()]['average'] = $average;
+
+                        // Ranking
+                        /*if (!empty($this->studentList)) {
+                            $invalidateRanking = true;
+                            foreach ($this->studentList as $user) {
+                                $score = $this->datagen->build_result_column(
+                                    $user['user_id'],
+                                    $item,
+                                    false,
+                                    true
+                                );
+                                if (!empty($score['score'])) {
+                                    $invalidateRanking = false;
+                                }
+                                $rankingStudentList[$user['user_id']] = $score['score'][0];
+                                $defaultData[$item->get_id()]['ranking'] = $rankingStudentList;
+                                $defaultData[$item->get_id()]['ranking_invalidate'] = $invalidateRanking;
+                            }
+                        }*/
                         break;
                     default:
                         // Best
@@ -255,12 +276,10 @@ class GradebookTable extends SortableTable
                         break;
                 }
             }
-            //exit;
             Session::write($this->getPreloadDataKey(), $defaultData);
         } else {
             $defaultData = $defaultDataFromSession;
         }
-
         return $defaultData;
     }
 
@@ -336,16 +355,13 @@ class GradebookTable extends SortableTable
             $this->studentList = $studentList;
         }
 
-        $defaultData = $this->preloadData();
-
         $data_array = $this->datagen->get_data(
             $sorting,
             $from,
             $this->per_page,
             false,
             $this->studentList,
-            $this->loadStats,
-            $defaultData
+            $this->loadStats
         );
 
         // generate the data to display
@@ -380,6 +396,7 @@ class GradebookTable extends SortableTable
 
         $course_code = api_get_course_id();
         $session_id = api_get_session_id();
+        $defaultData = Session::read($this->getPreloadDataKey());
 
         // Categories.
         if (!empty($data_array)) {
@@ -558,6 +575,7 @@ class GradebookTable extends SortableTable
                         $alllink = $subCategory->get_links($this->userId);
 
                         $sub_cat_info = new GradebookDataGenerator($allcat, $alleval, $alllink);
+                        $sub_cat_info->preLoadDataKey = $this->getPreloadDataKey();
                         $sub_cat_info->userId = $user_id;
                         $data_array2 = $sub_cat_info->get_data(
                             $sorting,
@@ -761,7 +779,6 @@ class GradebookTable extends SortableTable
 
                 $row[] = $main_weight;
                 $row[] = $totalResult;
-
                 $categoryId = $main_cat[0]->get_id();
 
                 if (in_array(1, $this->loadStats)) {
@@ -788,6 +805,7 @@ class GradebookTable extends SortableTable
                         }
                         $defaultData[$categoryId]['ranking'] = $totalRanking;
                         $defaultData[$categoryId]['ranking_invalidate'] = $invalidateRanking;
+                        Session::write($this->getPreloadDataKey(), $defaultData);
                     }
 
                     $totalRanking = AbstractLink::getCurrentUserRanking($user_id, $totalRanking);

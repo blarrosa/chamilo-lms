@@ -179,10 +179,12 @@ class ExerciseLink extends AbstractLink
     public function calc_score($stud_id = null, $type = null)
     {
         $allowStats = api_get_configuration_value('allow_gradebook_stats');
+
         if ($allowStats) {
             $link = $this->entity;
             if (!empty($link)) {
                 $weight = $link->getScoreWeight();
+
                 switch ($type) {
                     case 'best':
                         $bestResult = $link->getBestScore();
@@ -191,19 +193,23 @@ class ExerciseLink extends AbstractLink
                         return $result;
                         break;
                     case 'average':
-                        $count = count($link->getUserScoreList());
+                        $count = count($this->getStudentList());
                         if (empty($count)) {
                             $result = [0, $weight];
 
                             return $result;
                         }
-
                         $sumResult = array_sum($link->getUserScoreList());
                         $result = [$sumResult / $count, $weight];
-
                         return $result;
                         break;
                     case 'ranking':
+                        return '';
+                        $newList = [];
+                        var_dump($this->getStudentList());exit;
+                        foreach ($this->getStudentList() as $userId) {
+
+                        }
                         $ranking = AbstractLink::getCurrentUserRanking($stud_id, $link->getUserScoreList());
 
                         return $ranking;
@@ -211,13 +217,13 @@ class ExerciseLink extends AbstractLink
                     default:
                         if (!empty($stud_id)) {
                             $scoreList = $link->getUserScoreList();
-                            $result = [0, $link->getScoreWeight()];
+                            $result = [0, $weight];
                             if (isset($scoreList[$stud_id])) {
-                                $result = [$scoreList[$stud_id], $link->getScoreWeight()];
+                                $result = [$scoreList[$stud_id], $weight];
                             }
                             return $result;
                         } else {
-                            $studentCount = count($link->getUserScoreList());
+                            $studentCount = count($this->getStudentList());
                             $sumResult = array_sum($link->getUserScoreList());
                             $result = [$sumResult, $studentCount];
                         }

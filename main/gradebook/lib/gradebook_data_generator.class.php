@@ -1,6 +1,8 @@
 <?php
 /* For licensing terms, see /license.txt */
 
+use ChamiloSession as Session;
+
 /**
  * Class GradebookDataGenerator
  * Class to select, sort and transform object data into array data,
@@ -26,6 +28,7 @@ class GradebookDataGenerator
 
     public $items;
     private $evals_links;
+    public $preLoadDataKey;
 
     /**
      * @param array $cats
@@ -92,8 +95,7 @@ class GradebookDataGenerator
         $count = null,
         $ignore_score_color = false,
         $studentList = [],
-        $loadStats = true,
-        $defaultData = []
+        $loadStats = true
     ) {
         // do some checks on count, redefine if invalid value
         if (!isset($count)) {
@@ -116,6 +118,7 @@ class GradebookDataGenerator
         $data = [];
         $allowStats = api_get_configuration_value('allow_gradebook_stats');
         $scoreDisplay = ScoreDisplay::instance();
+        $defaultData = Session::read($this->preLoadDataKey);
 
         /** @var GradebookItem $item */
         foreach ($visibleItems as $item) {
@@ -128,7 +131,6 @@ class GradebookDataGenerator
                 api_get_short_text_from_html($item->get_description(), 160).'</span>';
             $row[] = $item->get_weight();
             $item->setStudentList($studentList);
-
             $itemType = get_class($item);
 
             switch ($itemType) {
@@ -196,18 +198,45 @@ class GradebookDataGenerator
                     $rankingStudentList = [];
                     $invalidateResults = false;
 
+                    $debug = $item->get_id() == 1177;
+
                     // Average
                     if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['average'])) {
                         $average = $defaultData[$item->get_id()]['average'];
                     } else {
-                        $average = $this->buildBestResultColumn($item);
+                        $average = $this->buildAverageResultColumn($item);
                     }
+
                     $row['average'] = $average['display'];
                     $row['average_score'] = $average['score'];
 
                     // Ranking
                     if ($allowStats) {
-                        $score = AbstractLink::getCurrentUserRanking($userId, $item->entity->getUserScoreList());
+                        // Ranking
+                        if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['ranking'])) {
+                            $rankingStudentList = $defaultData[$item->get_id()]['ranking'];
+                            $invalidateResults = $defaultData[$item->get_id()]['ranking_invalidate'];
+                            $score = AbstractLink::getCurrentUserRanking($userId, $rankingStudentList);
+                        } else {
+                            if (!empty($studentList)) {
+                                foreach ($studentList as $user) {
+                                    $score = $this->build_result_column(
+                                        $user['user_id'],
+                                        $item,
+                                        $ignore_score_color,
+                                        true
+                                    );
+                                    if (!empty($score['score'][0])) {
+                                        $invalidateResults = false;
+                                    }
+                                    $rankingStudentList[$user['user_id']] = $score['score'][0];
+                                }
+                                $defaultData[$item->get_id()]['ranking'] = $rankingStudentList;
+                                $defaultData[$item->get_id()]['ranking_invalidate'] = $invalidateResults;
+                                Session::write($this->preLoadDataKey, $defaultData);
+                            }
+                            $score = AbstractLink::getCurrentUserRanking($userId, $rankingStudentList);
+                        }
                     } else {
                         if (!empty($studentList)) {
                             foreach ($studentList as $user) {
@@ -266,7 +295,7 @@ class GradebookDataGenerator
                     if (isset($defaultData[$item->get_id()]) && isset($defaultData[$item->get_id()]['average'])) {
                         $average = $defaultData[$item->get_id()]['average'];
                     } else {
-                        $average = $this->buildBestResultColumn($item);
+                        $average = $this->buildAverageResultColumn($item);
                     }
                     $row['average'] = $average['display'];
                     $row['average_score'] = $average['score'];
@@ -292,6 +321,7 @@ class GradebookDataGenerator
                                 $rankingStudentList[$user['user_id']] = $score['score'][0];
                             }
                         }
+                        error_log('loading not cACHE');
                         $score = AbstractLink::getCurrentUserRanking($userId, $rankingStudentList);
                     }
 

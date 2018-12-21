@@ -1663,7 +1663,6 @@ class GradebookUtils
                 7 => 'class=centered',
             ];
         }
-
         $table = $gradebooktable->return_table();
         $graph = $gradebooktable->getGraph();
 

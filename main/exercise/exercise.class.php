@@ -8458,6 +8458,8 @@ class Exercise
                             c_id = $courseId ";
         }
 
+        $sql .= ' ORDER BY exe_id DESC';
+
         $studentCount = 0;
         $sum = 0;
         $bestResult = 0;

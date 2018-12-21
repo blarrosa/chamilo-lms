@@ -944,6 +944,7 @@ class Category implements GradebookItem
     ) {
         $key = 'category:'.$this->id.'student:'.(int) $stud_id.'type:'.$type.'course:'.$course_code.'session:'.(int) $session_id;
         $useCache = api_get_configuration_value('gradebook_use_apcu_cache');
+
         $cacheAvailable = api_get_configuration_value('apc') && $useCache;
 
         if ($cacheAvailable) {
@@ -952,6 +953,7 @@ class Category implements GradebookItem
                 return $cacheDriver->fetch($key);
             }
         }
+
         // Classic
         if (!empty($stud_id) && $type == '') {
             if (!empty($course_code)) {
@@ -1119,6 +1121,7 @@ class Category implements GradebookItem
                         $link->set_session_id($session_id);
                     }
                     $linkres = $link->calc_score($stud_id, $type);
+
                     if (!empty($linkres) && $link->get_weight() != 0) {
                         $students[$stud_id] = $linkres[0];
                         $linkweight = $link->get_weight();
@@ -1171,6 +1174,8 @@ class Category implements GradebookItem
                 return [$ressum, $weightsum];
                 break;
             case 'ranking':
+                var_dump('dsqdqsd');
+                exit;
                 // category ranking is calculated in gradebook_data_generator.class.php
                 // function get_data
                 return null;

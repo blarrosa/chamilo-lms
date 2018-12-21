@@ -2756,8 +2756,6 @@ HOTSPOT;
      */
     public static function convertScoreToPlatformSetting($score, $weight)
     {
-        $result = ['score' => $score, 'weight' => $weight];
-
         $maxNote = api_get_setting('exercise_max_score');
         $minNote = api_get_setting('exercise_min_score');
 

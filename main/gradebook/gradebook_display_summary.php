@@ -38,22 +38,36 @@ if (api_get_setting('gradebook_detailed_admin_view') === 'true') {
     }
 }
 
+/*Session::write('use_gradebook_cache', false);
+$useCache = api_get_configuration_value('gradebook_use_apcu_cache');
+$cacheAvailable = api_get_configuration_value('apc') && $useCache;
+
+if ($cacheAvailable) {
+    $cacheDriver = new \Doctrine\Common\Cache\ApcuCache();
+    $cacheDriver->deleteAll();
+    $cacheDriver->flushAll();
+}*/
+
 switch ($action) {
     case 'export_all':
+        //Session::write('use_gradebook_cache', true);
         $cats = Category::load($cat_id, null, null, null, null, null, false);
+        /** @var Category $cat */
         $cat = $cats[0];
-        $allcat = $cats[0]->get_subcategories(
+        $allcat = $cat->get_subcategories(
             null,
             api_get_course_id(),
             api_get_session_id()
         );
-        $alleval = $cats[0]->get_evaluations(
+        $alleval = $cat->get_evaluations(
             null,
+            true,
             api_get_course_id(),
             api_get_session_id()
         );
-        $alllink = $cats[0]->get_links(
+        $alllink = $cat->get_links(
             null,
+            true,
             api_get_course_id(),
             api_get_session_id()
         );
@@ -107,13 +121,18 @@ switch ($action) {
         }
 
         if (!empty($htmlList)) {
+            $counter = 0;
+            //error_log('Loading html list');
             $content = '';
             foreach ($htmlList as $value) {
                 $content .= $value.'<pagebreak>';
+                //error_log('Loading html: '.$counter);
+                $counter++;
             }
-            $tempFile = api_get_path(SYS_ARCHIVE_PATH).uniqid().'.html';
-            file_put_contents($tempFile, $content);
 
+            $tempFile = api_get_path(SYS_ARCHIVE_PATH).uniqid('gradebook_export_all').'.html';
+            file_put_contents($tempFile, $content);
+            //error_log('generating pdf');
             $pdf->html_to_pdf(
                 $tempFile,
                 null,
@@ -122,14 +141,14 @@ switch ($action) {
                 true,
                 true
             );
+            //error_log('End generating');
         }
 
         // Delete calc_score session data
         Session::erase('calc_score');
-        Session::erase('calc_score');
-
         break;
     case 'download':
+        //Session::write('use_gradebook_cache', true);
         $userId = isset($_GET['user_id']) && $_GET['user_id'] ? $_GET['user_id'] : null;
         $cats = Category::load($cat_id, null, null, null, null, null, false);
         GradebookUtils::generateTable($courseInfo, $userId, $cats);
